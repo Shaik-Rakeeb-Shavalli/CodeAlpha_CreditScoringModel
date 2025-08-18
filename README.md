@@ -89,16 +89,14 @@ Model results visualized using:
 ## Internship Submission
 
 - Repository name: `CodeAlpha_CreditScoringModel`
-- Explanation video: [LinkedIn link here]
-- Submission form: [As shared via WhatsApp]
+- Explanation video: [www.linkedin.com/in/shaik-rakeeb-sha-valli-4238bb2a8]
 
 ## Contact
 
 - CodeAlpha: www.codealpha.tech
 - For assistance: services@codealpha.tech
 
-**Prepared by:** [Your Name]  
+**Prepared by:** [Shaik Rakeeb Sha Valli]  
 **Location:** Tiruchirappalli, Tamil Nadu, India  
 **Date:** August 2025
 
-*For any questions, please raise an issue or contact via mail.*
