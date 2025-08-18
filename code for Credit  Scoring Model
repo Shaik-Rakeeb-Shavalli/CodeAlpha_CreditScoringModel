@@ -1,0 +1,196 @@
+import pandas as pd
+df=pd.read_csv('Delinquency_prediction_dataset.csv')
+print(df.shape)
+print(df.columns)
+print(df.head())
+print(df.info()) 
+print(df.info()) 
+print(df.describe())
+print(df.isnull().sum())
+df['Income'].fillna(df['Income'].median(), inplace=True)
+df['Credit_Score'].fillna(df['Credit_Score'].median(), inplace=True)
+df['Loan_Balance'].fillna(df['Loan_Balance'].median(), inplace=True)
+
+df = pd.get_dummies(df, columns=['Employment_Status', 'Credit_Card_Type', 'Location', 'Month_1', 'Month_2', 'Month_3', 'Month_4', 'Month_5', 'Month_6'])
+df.drop('Customer_ID', axis=1, inplace=True)
+print(df.isnull().sum())  # Should show 0 missing values now
+print(df.info())          # Confirm data types and final columns
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+# Histograms for numeric features
+df.hist(bins=20, figsize=(16, 12))
+plt.tight_layout()
+plt.show()
+
+# Count plot for the target variable
+sns.countplot(x='Delinquent_Account', data=df)
+plt.title('Delinquent Account Distribution')
+plt.show()
+
+# Boxplots for numeric vs. target
+num_cols = ['Age', 'Income', 'Credit_Score', 'Credit_Utilization', 'Missed_Payments', 'Loan_Balance', 'Debt_to_Income_Ratio', 'Account_Tenure']
+
+for col in num_cols:
+    plt.figure(figsize=(5, 3))
+    sns.boxplot(x='Delinquent_Account', y=col, data=df)
+    plt.title(f'{col} vs. Delinquent_Account')
+    plt.show()
+
+plt.figure(figsize=(10, 8))
+sns.heatmap(df.corr(), annot=True, cmap='Blues')
+plt.title('Correlation Matrix')
+plt.show()
+
+# Check if Month columns still exist
+month_cols = [f'Month_{i}' for i in range(1, 7)]
+found_month_cols = [col for col in month_cols if col in df.columns]
+print("Found payment status columns:", found_month_cols)
+
+# Map payment statuses to numeric scores
+payment_map = {'On-time': 0, 'Late': 1, 'Missed': 2}
+
+for col in found_month_cols:
+    df[col + '_score'] = df[col].map(payment_map)
+
+# Create aggregate payment score
+score_cols = [col + '_score' for col in found_month_cols]
+if score_cols:
+    df['Recent_Payment_Score'] = df[score_cols].sum(axis=1)
+    print("Recent_Payment_Score created successfully!")
+
+# Get correlations with target variable
+correlations = df.corr(numeric_only=True)['Delinquent_Account'].abs().sort_values(ascending=False)
+print("Features most correlated with Delinquent_Account:")
+print(correlations.head(10))
+
+# Drop original month columns and Customer_ID
+cols_to_drop = ['Customer_ID'] + found_month_cols
+df_final = df.drop(columns=[col for col in cols_to_drop if col in df.columns])
+
+# Handle any remaining categorical variables
+df_final = pd.get_dummies(df_final, drop_first=True)
+
+print("Final dataset shape:", df_final.shape)
+print("Final columns:", df_final.columns.tolist())
+
+from sklearn.model_selection import train_test_split, cross_val_score
+from sklearn.metrics import classification_report, roc_auc_score, confusion_matrix
+from imblearn.over_sampling import SMOTE
+from imblearn.pipeline import Pipeline
+import pandas as pd
+import numpy as np
+
+# Install imbalanced-learn if not already installed
+!pip install imbalanced-learn
+
+# Separate features and target
+X = df_final.drop('Delinquent_Account', axis=1)
+y = df_final['Delinquent_Account']
+
+# Split with stratification to maintain class ratio
+X_train, X_test, y_train, y_test = train_test_split(
+    X, y, test_size=0.2, random_state=42, stratify=y
+)
+
+print("Train set shape:", X_train.shape)
+print("Test set shape:", X_test.shape)
+print("Train class distribution:")
+print(y_train.value_counts())
+
+from sklearn.linear_model import LogisticRegression
+from sklearn.ensemble import RandomForestClassifier
+from xgboost import XGBClassifier
+from imblearn.over_sampling import SMOTE
+
+# Initialize SMOTE
+smote = SMOTE(random_state=42)
+
+# Apply SMOTE to training data
+X_train_balanced, y_train_balanced = smote.fit_resample(X_train, y_train)
+
+print("After SMOTE:")
+print("Balanced training set shape:", X_train_balanced.shape)
+print("Balanced class distribution:")
+print(pd.Series(y_train_balanced).value_counts())
+
+# Initialize models
+models = {
+    'Logistic Regression': LogisticRegression(max_iter=1000, random_state=42),
+    'Random Forest': RandomForestClassifier(n_estimators=100, random_state=42),
+    'XGBoost': XGBClassifier(random_state=42, eval_metric='logloss')
+}
+
+# Train and evaluate each model
+results = {}
+
+for name, model in models.items():
+    print(f"\n=== {name} ===")
+    
+    # Train on balanced data
+    model.fit(X_train_balanced, y_train_balanced)
+    
+    # Predict on test set
+    y_pred = model.predict(X_test)
+    y_proba = model.predict_proba(X_test)[:, 1]
+    
+    # Evaluate
+    print(classification_report(y_test, y_pred))
+    roc_score = roc_auc_score(y_test, y_proba)
+    print(f"ROC-AUC: {roc_score:.4f}")
+    
+    # Store results
+    results[name] = {
+        'model': model,
+        'roc_auc': roc_score,
+        'predictions': y_pred,
+        'probabilities': y_proba
+    }
+
+# Feature importance for tree-based models
+for name, result in results.items():
+    if name in ['Random Forest', 'XGBoost']:
+        model = result['model']
+        feature_importance = pd.DataFrame({
+            'feature': X.columns,
+            'importance': model.feature_importances_
+        }).sort_values('importance', ascending=False)
+        
+        print(f"\n=== Top 10 Important Features for {name} ===")
+        print(feature_importance.head(10))
+
+from sklearn.metrics import roc_curve, auc
+import matplotlib.pyplot as plt
+
+# Example for your best model
+y_proba = results['Random Forest']['probabilities']  # or whichever model you select
+fpr, tpr, thresholds = roc_curve(y_test, y_proba)
+roc_auc = auc(fpr, tpr)
+
+plt.figure(figsize=(6,6))
+plt.plot(fpr, tpr, color='blue', lw=2, label=f'ROC curve (area = {roc_auc:0.2f})')
+plt.plot([0, 1], [0, 1], color='gray', lw=2, linestyle='--')
+plt.xlim([0.0, 1.0])
+plt.ylim([0.0, 1.05])
+plt.xlabel('False Positive Rate')
+plt.ylabel('True Positive Rate')
+plt.title('ROC Curve - Credit Scoring Model')
+plt.legend(loc="lower right")
+plt.show()
+
+from sklearn.metrics import confusion_matrix
+import seaborn as sns
+
+y_pred = results['Random Forest']['predictions']  # best model
+cm = confusion_matrix(y_test, y_pred)
+
+sns.heatmap(cm, annot=True, fmt='d', cmap='Blues')
+plt.xlabel('Predicted')
+plt.ylabel('Actual')
+plt.title('Confusion Matrix')
+plt.show()
+
+import joblib
+
+best_model = results['Random Forest']['model']  # or your selection
+joblib.dump(best_model, 'credit_scoring_model.pkl')
